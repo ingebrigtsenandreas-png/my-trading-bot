@@ -7,23 +7,19 @@ import yfinance as yf
 # SECURE CONFIGURATION (Reads from GitHub Secrets)
 # ==========================================
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-T212_KEY = os.environ.get("T212_KEY")          # API Key ID
-T212_SECRET = os.environ.get("T212_SECRET")    # Secret Key
+T212_KEY = os.environ.get("T212_KEY")          # Your API Key ID
+T212_SECRET = os.environ.get("T212_SECRET")    # Your Secret Key
 
-# Direct Official Trading 212 API Gateway
+# Using the strict, direct Trading 212 Sandbox API Domain
 T212_URL = "https://trading212.com" 
-
 TARGET_TICKER = "AAPL"
 T212_TICKER = "AAPL_US_EQ"
 MAX_RISK_PERCENT = 0.05
 
-# Modern Trading 212 API Header Specification: 
-# It expects the raw API key passed inside the Authorization structure.
-# We prioritize the Secret Key if provided, otherwise fallback to the primary key.
-active_api_token = T212_SECRET if T212_SECRET else T212_KEY
-
+# Trading 212 Official REST API Header Spec:
+# It requires your Secret Token sent directly via the Authorization Header.
 t212_headers = {
-    "Authorization": f"{active_api_token}",
+    "Authorization": T212_SECRET if T212_SECRET else T212_KEY,
     "Content-Type": "application/json"
 }
 
@@ -47,7 +43,6 @@ def run_automated_trade():
         
         if summary_res.status_code != 200:
             print(f"Server refused authentication layout. Error Message: {summary_res.text}")
-            print("Tip: Verify your GitHub secrets match your Trading 212 settings dashboard keys exactly.")
             return
             
         summary_data = summary_res.json()
