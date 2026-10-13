@@ -1,5 +1,4 @@
 import os
-import base64
 import json
 import requests
 import yfinance as yf
@@ -8,24 +7,23 @@ import yfinance as yf
 # SECURE CONFIGURATION (Reads from GitHub Secrets)
 # ==========================================
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-T212_KEY = os.environ.get("T212_KEY")          # Your API Key ID
-T212_SECRET = os.environ.get("T212_SECRET")    # Your Secret Key
+T212_KEY = os.environ.get("T212_KEY")          # API Key ID
+T212_SECRET = os.environ.get("T212_SECRET")    # Secret Key
 
-# Official Trading 212 Beta API Subdomains
-T212_URL = "https://demo.trading212.com/api/v0" 
+# Direct Official Trading 212 API Gateway
+T212_URL = "https://trading212.com" 
 
 TARGET_TICKER = "AAPL"
 T212_TICKER = "AAPL_US_EQ"
 MAX_RISK_PERCENT = 0.05
 
-# --- MANDATORY AUTHENTICATION CONVENTION ---
-# Trading 212 requires HTTP Basic Auth: Base64(API_KEY_ID:SECRET_KEY)
-auth_str = f"{T212_KEY}:{T212_SECRET}"
-auth_bytes = auth_str.encode('utf-8')
-base64_auth = base64.b64encode(auth_bytes).decode('utf-8')
+# Modern Trading 212 API Header Specification: 
+# It expects the raw API key passed inside the Authorization structure.
+# We prioritize the Secret Key if provided, otherwise fallback to the primary key.
+active_api_token = T212_SECRET if T212_SECRET else T212_KEY
 
 t212_headers = {
-    "Authorization": f"Basic {base64_auth}",
+    "Authorization": f"{active_api_token}",
     "Content-Type": "application/json"
 }
 
@@ -42,13 +40,14 @@ def run_automated_trade():
         print(f"Market Data Fetch Interrupted: {e}")
         return
     
-    # 2. Extract portfolio values using Basic Authentication
+    # 2. Extract portfolio values using updated API header structure
     try:
         summary_res = requests.get(f"{T212_URL}/equity/account/summary", headers=t212_headers)
         print(f"Trading 212 Gateway Status Code: {summary_res.status_code}")
         
         if summary_res.status_code != 200:
             print(f"Server refused authentication layout. Error Message: {summary_res.text}")
+            print("Tip: Verify your GitHub secrets match your Trading 212 settings dashboard keys exactly.")
             return
             
         summary_data = summary_res.json()
@@ -94,7 +93,7 @@ def run_automated_trade():
         return
         
     if action == "SELL":
-        qty = -abs(qty) # Trading 212 convention uses negative floats for sell streams
+        qty = -abs(qty)
         
     order_payload = {"ticker": T212_TICKER, "quantity": qty, "timeInForce": "DAY"}
     
