@@ -1,4 +1,5 @@
 import os
+import base64
 import json
 import requests
 import yfinance as yf
@@ -7,20 +8,25 @@ import yfinance as yf
 # SECURE CONFIGURATION (Reads from GitHub Secrets)
 # ==========================================
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-T212_KEY = os.environ.get("T212_KEY")
-T212_SECRET = os.environ.get("T212_SECRET")
+T212_KEY = os.environ.get("T212_KEY")          # Your API Key ID
+T212_SECRET = os.environ.get("T212_SECRET")    # Your Secret Key
 
-# Using the dedicated sandbox direct-api domain to bypass front-end browser checks
-T212_URL = "https://trading212.com" 
+# Official Trading 212 Beta API Subdomains
+T212_URL = "https://demo.trading212.com/api/v0" 
+
 TARGET_TICKER = "AAPL"
 T212_TICKER = "AAPL_US_EQ"
 MAX_RISK_PERCENT = 0.05
 
-# Trading 212 strict developer request authentication header structure
+# --- MANDATORY AUTHENTICATION CONVENTION ---
+# Trading 212 requires HTTP Basic Auth: Base64(API_KEY_ID:SECRET_KEY)
+auth_str = f"{T212_KEY}:{T212_SECRET}"
+auth_bytes = auth_str.encode('utf-8')
+base64_auth = base64.b64encode(auth_bytes).decode('utf-8')
+
 t212_headers = {
-    "X-API-KEY": T212_SECRET if T212_SECRET else T212_KEY,
-    "Content-Type": "application/json",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" # Mimics standard server headers
+    "Authorization": f"Basic {base64_auth}",
+    "Content-Type": "application/json"
 }
 
 def run_automated_trade():
@@ -36,13 +42,13 @@ def run_automated_trade():
         print(f"Market Data Fetch Interrupted: {e}")
         return
     
-    # 2. Extract portfolio values from Trading 212
+    # 2. Extract portfolio values using Basic Authentication
     try:
         summary_res = requests.get(f"{T212_URL}/equity/account/summary", headers=t212_headers)
-        print(f"Trading 212 Status Code: {summary_res.status_code}")
+        print(f"Trading 212 Gateway Status Code: {summary_res.status_code}")
         
         if summary_res.status_code != 200:
-            print(f"Trading 212 returned error text or code. Request could not complete.")
+            print(f"Server refused authentication layout. Error Message: {summary_res.text}")
             return
             
         summary_data = summary_res.json()
@@ -62,7 +68,7 @@ def run_automated_trade():
         '{"action": "BUY" | "SELL" | "HOLD", "quantity": 1.0}'
     )
     
-    # 4. Corrected complete Google Gemini Flash endpoint path
+    # 4. Prompt Google Gemini Flash API endpoint 
     gemini_url = f"https://googleapis.com{GEMINI_API_KEY}"
     payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
     
@@ -88,7 +94,7 @@ def run_automated_trade():
         return
         
     if action == "SELL":
-        qty = -abs(qty)
+        qty = -abs(qty) # Trading 212 convention uses negative floats for sell streams
         
     order_payload = {"ticker": T212_TICKER, "quantity": qty, "timeInForce": "DAY"}
     
