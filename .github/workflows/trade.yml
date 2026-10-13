@@ -1,0 +1,30 @@
+name: Run Daily AI Trade
+
+on:
+  schedule:
+    # Wakes up automatically every Monday-Friday at 15:45 UTC (right after US stock market opens)
+    - cron: '45 15 * * *'
+  workflow_dispatch: # Gives you a manual button to test it instantly
+
+jobs:
+  trade:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          pip install requests yfinance
+
+      - name: Execute Trading Bot
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          T212_KEY: ${{ secrets.T212_KEY }}
+          T212_SECRET: ${{ secrets.T212_SECRET }}
+        run: python bot.py
