@@ -1,5 +1,4 @@
 import os
-import base64
 import json
 import requests
 import yfinance as yf
@@ -11,24 +10,22 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 T212_KEY = os.environ.get("T212_KEY")
 T212_SECRET = os.environ.get("T212_SECRET")
 
-# Trading 212 Official Environments:
-# Demo (Paper Trading Sandbox): "https://demo.trading212.com/api/v0"
-# Live (Real Capital Portfolio): "https://live.trading212.com/api/v0"
-T212_URL = "https://demo.trading212.com/api/v0" 
+# Trading 212 Sandbox Configuration
+T212_URL = "https://trading212.com" 
+TARGET_TICKER = "AAPL"
+T212_TICKER = "AAPL_US_EQ"
+MAX_RISK_PERCENT = 0.05
 
-TARGET_TICKER = "AAPL"        # Yahoo Finance ticker flag
-T212_TICKER = "AAPL_US_EQ"    # Trading 212 internal contract tracking ID
-MAX_RISK_PERCENT = 0.05       # Guardrail limit: Max 5% account cash exposure
-
-# Construct Basic Authentication Credentials (Key:Secret encoded)
-auth_bytes = f"{T212_KEY}:{T212_SECRET}".encode('utf-8')
-auth_header = base64.b64encode(auth_bytes).decode('utf-8')
-t212_headers = {"Authorization": f"Basic {auth_header}"}
+# Corrected Trading 212 API Header Structure
+t212_headers = {
+    "Authorization": f"Bearer {T212_SECRET}" if T212_SECRET else f"Bearer {T212_KEY}",
+    "Content-Type": "application/json"
+}
 
 def run_automated_trade():
     print("Initiating free AI trading bot workflow...")
     
-    # 1. Fetch market context via Yahoo Finance (yfinance library)
+    # 1. Fetch market data via Yahoo Finance
     try:
         ticker_data = yf.Ticker(TARGET_TICKER)
         history = ticker_data.history(period="2d")
@@ -38,10 +35,18 @@ def run_automated_trade():
         print(f"Market Data Fetch Interrupted: {e}")
         return
     
-    # 2. Extract portfolio values via Trading 212 REST account layer
+    # 2. Extract portfolio values from Trading 212
     try:
-        summary_res = requests.get(f"{T212_URL}/equity/account/summary", headers=t212_headers).json()
-        free_cash = float(summary_res.get("free", 0))
+        summary_res = requests.get(f"{T212_URL}/equity/account/summary", headers=t212_headers)
+        print(f"Trading 212 Status Code: {summary_res.status_code}")
+        
+        # Guardrail check against empty or non-JSON responses
+        if summary_res.status_code != 200:
+            print(f"Trading 212 returned error text: {summary_res.text}")
+            return
+            
+        summary_data = summary_res.json()
+        free_cash = float(summary_data.get("free", 0))
         print(f"Verified available liquidity balance: \${free_cash:.2f}")
     except Exception as e:
         print(f"Trading 212 Connection Dropped: {e}")
@@ -57,7 +62,7 @@ def run_automated_trade():
         '{"action": "BUY" | "SELL" | "HOLD", "quantity": 1.0}'
     )
     
-    # 4. Prompt Google Gemini Flash API endpoint directly via HTTPS REST requests
+    # 4. Corrected complete Google Gemini Flash endpoint path
     gemini_url = f"https://googleapis.com{GEMINI_API_KEY}"
     payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
     
@@ -65,11 +70,12 @@ def run_automated_trade():
         gemini_res = requests.post(gemini_url, json=payload).json()
         ai_raw_text = gemini_res['candidates'][0]['content']['parts'][0]['text'].strip()
         
-        # Clean out markdown annotations if model slips back to chat styles
+        # Clean out markdown code boundaries if model formats response style
         if "```json" in ai_raw_text:
             ai_raw_text = ai_raw_text.replace("```json", "").replace("```", "").strip()
             
         decision = json.loads(ai_raw_text)
+        print(f"AI Decision Data Object parsed successfully: {decision}")
     except Exception as e:
         print(f"AI decision-making logic error: {e}. Forcing safety sequence: HOLD.")
         decision = {"action": "HOLD", "quantity": 0}
@@ -83,7 +89,6 @@ def run_automated_trade():
         return
         
     if action == "SELL":
-        # Trading 212 relies on signed values (Negative quantity = Sell Order execution)
         qty = -abs(qty)
         
     order_payload = {"ticker": T212_TICKER, "quantity": qty, "timeInForce": "DAY"}
@@ -94,3 +99,4 @@ def run_automated_trade():
 
 if __name__ == "__main__":
     run_automated_trade()
+
